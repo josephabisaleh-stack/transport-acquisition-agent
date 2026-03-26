@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+.venv-*/
+venv/
+
+# Playwright sessions (contain login cookies — never commit)
+.browser_sessions/
+
+# Runtime data
+seen_listings.db
+agent.log
+
+# Debug screenshots
+debug_*.png
+
+# OS
+.DS_Store
+Thumbs.db
