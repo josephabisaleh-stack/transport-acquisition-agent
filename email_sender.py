@@ -126,7 +126,7 @@ def _build_plain(new_listings: list[dict]) -> str:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def send_digest(new_listings: list[dict], force: bool = False):
+def send_digest(new_listings: list[dict], force: bool = False, label: str = ""):
     """
     Send the daily email digest.
 
@@ -134,22 +134,26 @@ def send_digest(new_listings: list[dict], force: bool = False):
     ----------
     new_listings : list[dict]   New listings found today.
     force        : bool         Send even when there are 0 new listings.
+    label        : str          Optional label shown in subject and header
+                                (e.g. "Mots-clés ciblés" or "Toutes les annonces").
     """
     if not new_listings and not force:
-        logger.info("No new listings — skipping email.")
+        logger.info("No new listings — skipping email (label=%r).", label)
         return
 
+    n = len(new_listings)
+    label_suffix = f" [{label}]" if label else ""
     msg = MIMEMultipart("alternative")
     msg["Subject"] = (
-        f"🚛 {len(new_listings)} nouvelle(s) cible(s) acquisition"
+        f"🚛 {n} nouvelle(s) cible(s) acquisition{label_suffix}"
         if new_listings
-        else "🚛 Digest acquisition – rien de nouveau aujourd'hui"
+        else f"🚛 Digest acquisition – rien de nouveau{label_suffix}"
     )
     msg["From"]    = EMAIL_SENDER
     msg["To"]      = ", ".join(EMAIL_RECIPIENTS)
 
-    msg.attach(MIMEText(_build_plain(new_listings), "plain", "utf-8"))
-    msg.attach(MIMEText(_build_html(new_listings),  "html",  "utf-8"))
+    msg.attach(MIMEText(_build_plain(new_listings, label), "plain", "utf-8"))
+    msg.attach(MIMEText(_build_html(new_listings, label),  "html",  "utf-8"))
 
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
@@ -157,7 +161,7 @@ def send_digest(new_listings: list[dict], force: bool = False):
             server.starttls()
             server.login(EMAIL_SENDER, EMAIL_PASSWORD)
             server.sendmail(EMAIL_SENDER, EMAIL_RECIPIENTS, msg.as_string())
-        logger.info("Digest sent to %s", EMAIL_RECIPIENTS)
+        logger.info("Digest sent to %s (label=%r)", EMAIL_RECIPIENTS, label)
     except smtplib.SMTPException as exc:
         logger.error("Failed to send email: %s", exc)
         raise

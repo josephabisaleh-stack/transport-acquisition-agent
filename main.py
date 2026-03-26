@@ -61,16 +61,28 @@ def run(dry_run: bool = False, force_email: bool = False):
     if not dry_run and new_listings:
         db.mark_seen(new_listings)
 
-    # 5. Send email digest
+    # 5. Split into keyword-matched vs all listings for two email digests
+    kw_lower = [kw.lower() for kw in SEARCH_KEYWORDS]
+    keyword_listings = [
+        l for l in new_listings
+        if any(kw in (l["title"] + " " + l.get("description", "")).lower() for kw in kw_lower)
+    ]
+    logger.info("Keyword-matched listings: %d", len(keyword_listings))
+
+    # 6. Send email digests
     if not dry_run:
-        send_digest(new_listings, force=force_email)
+        send_digest(keyword_listings, force=force_email, label="Mots-clés ciblés")
+        send_digest(new_listings,     force=force_email, label="Toutes les annonces")
         db.log_run(len(new_listings))
     else:
-        logger.info("[DRY RUN] Would send email with %d listings:", len(new_listings))
+        logger.info("[DRY RUN] Keyword-matched (%d):", len(keyword_listings))
+        for l in keyword_listings:
+            logger.info("  • [%s] %s — %s", l["source"], l["title"], l["url"])
+        logger.info("[DRY RUN] All listings (%d):", len(new_listings))
         for l in new_listings:
             logger.info("  • [%s] %s — %s", l["source"], l["title"], l["url"])
 
-    logger.info("Agent finished. New listings today: %d", len(new_listings))
+    logger.info("Agent finished. New listings: %d total, %d keyword-matched", len(new_listings), len(keyword_listings))
     return len(new_listings)
 
 
