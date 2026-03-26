@@ -84,7 +84,8 @@ async def _extract_listings(page: Page) -> list[dict]:
 async def _search(page: Page, keyword: str) -> list[dict]:
     url = RESULTS_URL.replace("{{keyword}}", keyword.replace(" ", "+"))
     try:
-        await page.goto(url, wait_until="networkidle", timeout=25_000)
+        # domcontentloaded is faster and more reliable than networkidle on CI
+        await page.goto(url, wait_until="domcontentloaded", timeout=40_000)
     except PWTimeout:
         await screenshot_on_failure(page, SITE, f"search_{keyword[:20]}")
         logger.warning("[fusacq] Page timed out for '%s'", keyword)
@@ -95,8 +96,8 @@ async def _search(page: Page, keyword: str) -> list[dict]:
     # Wait for listing content to render
     try:
         await page.wait_for_selector(
-            ".annonce-card, .annonce, article, a[href*='/annonce-']",
-            timeout=8_000,
+            "div.card-ie, div.card.no_shadow, .annonce-card, .annonce, article",
+            timeout=12_000,
         )
     except PWTimeout:
         pass

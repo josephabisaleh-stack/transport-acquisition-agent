@@ -39,14 +39,22 @@ async def _extract_listings(page: Page) -> list[dict]:
 
     try:
         await page.wait_for_selector(
-            "tr.table-row, [data-href], table tbody tr",
-            timeout=12_000,
+            "tr.table-row, tr[data-href], table tbody tr, [data-href], "
+            "[class*='row'], [class*='item'], article, .card",
+            timeout=15_000,
         )
     except PWTimeout:
         logger.debug("[transmibat] No listing rows appeared within timeout.")
         return []
 
-    rows = await page.query_selector_all("tr.table-row, tr[data-href]")
+    rows = await page.query_selector_all(
+        "tr.table-row, tr[data-href], table tbody tr[class], "
+        "[data-href]:not(head):not(html):not(body)"
+    )
+
+    # Fallback: any table row with a link inside
+    if not rows:
+        rows = await page.query_selector_all("table tbody tr")
 
     for row in rows:
         try:
@@ -59,7 +67,7 @@ async def _extract_listings(page: Page) -> list[dict]:
             if not href:
                 continue
 
-            url = href if href.startswith("http") else BASE_URL + href
+            url = href if href.startswith("http") else BASE_URL + (href if href.startswith("/") else "/" + href)
 
             cells = await row.query_selector_all("td")
             texts = []
@@ -107,6 +115,7 @@ async def _scrape_pages(page: Page) -> list[dict]:
 
         results = await _extract_listings(page)
         if not results:
+            await screenshot_on_failure(page, SITE, f"no_results_page_{page_num}")
             logger.info("[transmibat] No results on page %d — stopping.", page_num)
             break
 

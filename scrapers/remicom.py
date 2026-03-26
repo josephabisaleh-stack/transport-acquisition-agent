@@ -41,18 +41,23 @@ async def _extract_listings(page: Page) -> list[dict]:
 
     try:
         await page.wait_for_selector(
-            "a[href*='/fr/'], .card, article, [class*='item'], [class*='offer'], [class*='object']",
-            timeout=12_000,
+            "a[href], .card, article, [class*='item'], [class*='offer'], "
+            "[class*='object'], [class*='annonce'], li",
+            timeout=15_000,
         )
     except PWTimeout:
         logger.debug("[remicom] No listing cards appeared within timeout.")
         return []
 
+    # Broad selector — filter by URL pattern afterwards
     cards = await page.query_selector_all(
-        "a[href*='/fr/objet-'], a[href*='/fr/offre-'], "
-        "[class*='object-item'], [class*='offer-item'], [class*='listing-item'], "
-        "article, .card"
+        "[class*='object'], [class*='offer'], [class*='annonce'], "
+        "[class*='listing'], [class*='item'], article, .card, li"
     )
+
+    # Fallback: if broad selectors yield nothing, grab all links on the page
+    if not cards:
+        cards = await page.query_selector_all("a[href]")
 
     for card in cards:
         try:
@@ -68,11 +73,15 @@ async def _extract_listings(page: Page) -> list[dict]:
             href = await link_el.get_attribute("href") or ""
             if not href:
                 continue
-            url = href if href.startswith("http") else BASE_URL + href
+            url = href if href.startswith("http") else BASE_URL + (href if href.startswith("/") else "/" + href)
 
-            # Skip navigation/category links — real listings have longer paths
+            # Skip navigation/category links — real listings have paths of
+            # meaningful length and are not the category page itself
             path_tail = url.rstrip("/").rsplit("/", 1)[-1]
-            if len(path_tail) < 5:
+            if len(path_tail) < 5 or url == LIST_URL:
+                continue
+            # Must be on the remicom.com domain
+            if "remicom.com" not in url:
                 continue
 
             title_el = await card.query_selector(
@@ -131,6 +140,7 @@ async def _scrape_pages(page: Page) -> list[dict]:
 
         results = await _extract_listings(page)
         if not results:
+            await screenshot_on_failure(page, SITE, f"no_results_page_{page_num}")
             logger.info("[remicom] No results on page %d — stopping pagination.", page_num)
             break
 

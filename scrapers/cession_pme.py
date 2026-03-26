@@ -72,7 +72,12 @@ async def _extract_listings(page: Page) -> list[dict]:
             if not title_el or not link_el:
                 continue
             href = await link_el.get_attribute("href") or ""
-            url  = href if href.startswith("http") else BASE_URL + href
+            if href.startswith("http"):
+                url = href
+            elif href.startswith("/"):
+                url = BASE_URL + href
+            else:
+                url = BASE_URL + "/" + href
             listings.append({
                 "source":      "Cession PME",
                 "title":       (await title_el.inner_text()).strip(),

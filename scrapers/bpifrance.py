@@ -13,7 +13,7 @@ import logging
 
 from playwright.async_api import Page, TimeoutError as PWTimeout
 
-from browser import browser_page, screenshot_on_failure
+from browser import browser_page, human_type, screenshot_on_failure
 from config import SEARCH_KEYWORDS, DELAY_BETWEEN_REQUESTS
 
 logger = logging.getLogger(__name__)
@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 SITE       = "bpifrance"
 BASE_URL   = "https://reprise-entreprise.bpifrance.fr"
 SEARCH_URL = f"{BASE_URL}/Annonces"
+
+# Alternative URL params to try if the first doesn't work
+_SEARCH_PARAMS = ["motsCles", "q", "search", "keywords", "keyword"]
 
 _TRANSPORT_KW = [
     "transport", "transitaire", "logistique", "freight", "commissionnaire",
@@ -37,11 +40,12 @@ def _is_transport_related(listing: dict) -> bool:
 async def _extract_listings(page: Page) -> list[dict]:
     listings = []
 
-    # Wait for cards to render (JS-heavy page)
+    # Wait for cards to render (JS-heavy SPA)
     try:
         await page.wait_for_selector(
-            "article, .annonce, .card, [class*='annonce'], [class*='card'], [class*='listing'], li[class]",
-            timeout=12_000,
+            "article, .annonce, .card, [class*='annonce'], [class*='card'], "
+            "[class*='listing'], [class*='result'], li[class], a[href*='/Annonces/']",
+            timeout=15_000,
         )
     except PWTimeout:
         logger.debug("[bpifrance] No listing cards appeared within timeout.")
@@ -49,7 +53,8 @@ async def _extract_listings(page: Page) -> list[dict]:
 
     cards = await page.query_selector_all(
         "article, .annonce-item, .annonce, [class*='annonce'], [class*='card-annonce'], "
-        "[class*='listing-item'], li[class*='item']"
+        "[class*='listing-item'], [class*='result-item'], li[class*='item'], "
+        "a[href*='/Annonces/']"
     )
 
     for card in cards:
@@ -79,7 +84,7 @@ async def _extract_listings(page: Page) -> list[dict]:
             href = await link_el.get_attribute("href") or ""
             if not href:
                 continue
-            url = href if href.startswith("http") else BASE_URL + href
+            url = href if href.startswith("http") else BASE_URL + (href if href.startswith("/") else "/" + href)
 
             title_text = (await title_el.inner_text()).strip()
             if not title_text:
@@ -101,15 +106,37 @@ async def _extract_listings(page: Page) -> list[dict]:
 
 
 async def _search(page: Page, keyword: str) -> list[dict]:
-    url = f"{SEARCH_URL}?motsCles={keyword}"
+    # Try URL param approach first (fastest)
+    url = f"{SEARCH_URL}?motsCles={keyword.replace(' ', '+')}"
     try:
-        await page.goto(url, wait_until="networkidle", timeout=25_000)
+        await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
     except PWTimeout:
         await screenshot_on_failure(page, SITE, f"search_{keyword[:20]}")
         logger.warning("[bpifrance] Page timed out for '%s'", keyword)
         return []
 
     results = await _extract_listings(page)
+
+    # If URL param yielded nothing, try typing into the search box
+    if not results:
+        try:
+            await page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=30_000)
+            input_sel = (
+                "input[type='search'], input[placeholder*='mot'], "
+                "input[placeholder*='recherch'], input[name*='search'], "
+                "input[name*='mot'], input[type='text']"
+            )
+            if await page.query_selector(input_sel):
+                await human_type(page, input_sel, keyword)
+                await page.keyboard.press("Enter")
+                await page.wait_for_load_state("networkidle", timeout=15_000)
+                results = await _extract_listings(page)
+        except Exception as exc:
+            logger.debug("[bpifrance] Search box fallback failed: %s", exc)
+
+    if not results:
+        await screenshot_on_failure(page, SITE, f"no_results_{keyword[:20]}")
+
     logger.info("[bpifrance] '%s' -> %d results", keyword, len(results))
     return results
 

@@ -25,18 +25,34 @@ SEARCH_URL    = f"{BASE_URL}/offres"
 TRANSPORT_URL = f"{BASE_URL}/offres/activite/Transport-logistique-L"
 CREDS         = CREDENTIALS[SITE]
 
-# Transentreprise exposes an RSS feed — use it when possible
-RSS_URL   = f"{BASE_URL}/offres.rss"
+# Transentreprise RSS feed (try multiple known paths)
+RSS_URLS  = [
+    f"{BASE_URL}/offres.rss",
+    f"{BASE_URL}/annonces.rss",
+    f"{BASE_URL}/rss",
+    f"{BASE_URL}/feed",
+]
 
 
 # ── RSS fast-path ─────────────────────────────────────────────────────────────
 
 def _fetch_rss() -> list[dict]:
     """Try to pull listings from the RSS feed (no login required)."""
+    resp = None
+    for rss_url in RSS_URLS:
+        try:
+            r = requests.get(rss_url, timeout=15, headers={"Accept-Language": "fr-FR"})
+            if r.status_code == 200:
+                resp = r
+                logger.info("[transentreprise] RSS found at %s", rss_url)
+                break
+        except Exception:
+            continue
+    if resp is None:
+        logger.info("[transentreprise] No RSS feed found, falling back to browser.")
+        return []
     try:
-        resp = requests.get(RSS_URL, timeout=15, headers={"Accept-Language": "fr-FR"})
-        resp.raise_for_status()
-        root = ET.fromstring(resp.content)
+        root = ET.fromstring(resp.content)  # type: ignore[union-attr]
         items = root.findall(".//item")
         results = []
         for item in items:
