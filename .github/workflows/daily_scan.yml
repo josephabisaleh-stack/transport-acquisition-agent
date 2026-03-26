@@ -13,10 +13,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.4.0
         with:
           python-version: "3.11"
 
@@ -28,7 +28,7 @@ jobs:
 
       # Restore saved login sessions (cookies) from previous run
       - name: Restore browser sessions cache
-        uses: actions/cache@v4
+        uses: actions/cache@v4.2.3
         with:
           path: .browser_sessions
           key: browser-sessions-v1
@@ -50,7 +50,7 @@ jobs:
 
       # Persist browser sessions (cookies) for next run
       - name: Save browser sessions cache
-        uses: actions/cache@v4
+        uses: actions/cache@v4.2.3
         with:
           path: .browser_sessions
           key: browser-sessions-v1
