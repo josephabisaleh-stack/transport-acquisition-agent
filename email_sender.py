@@ -49,10 +49,11 @@ def _listing_html(listing: dict, index: int) -> str:
     </div>"""
 
 
-def _build_html(new_listings: list[dict], label: str = "") -> str:
+def _build_html(new_listings: list[dict], label: str = "", source_counts: dict = None) -> str:
     today  = datetime.now().strftime("%d %B %Y")
     count  = len(new_listings)
     cards  = "\n".join(_listing_html(l, i) for i, l in enumerate(new_listings))
+    label_display = f" · {label}" if label else ""
 
     s = "s" if count > 1 else ""
     summary = (
@@ -62,6 +63,21 @@ def _build_html(new_listings: list[dict], label: str = "") -> str:
     )
     no_listings_msg = "<p style='color:#6b7280; text-align:center; padding:32px 0;'>L'agent repassera demain.</p>"
     body = cards if count > 0 else no_listings_msg
+
+    # Build per-source breakdown table
+    if source_counts:
+        rows = "".join(
+            f"<tr><td style='padding:3px 12px 3px 0; color:#374151;'>{src}</td>"
+            f"<td style='padding:3px 0; font-weight:600; color:#1e3a8a;'>{n}</td></tr>"
+            for src, n in sorted(source_counts.items())
+        )
+        sources_block = f"""
+        <tr><td style="background:#f0f4ff; padding:12px 32px; border-top:1px solid #dbeafe;">
+          <p style="margin:0 0 6px; font-size:12px; color:#6b7280; text-transform:uppercase; letter-spacing:.05em;">Par plateforme</p>
+          <table cellpadding="0" cellspacing="0">{rows}</table>
+        </td></tr>"""
+    else:
+        sources_block = ""
 
     return f"""
 <!DOCTYPE html>
@@ -75,7 +91,7 @@ def _build_html(new_listings: list[dict], label: str = "") -> str:
         <!-- Header -->
         <tr><td style="background:#1e3a5f; border-radius:12px 12px 0 0; padding:28px 32px;">
           <h1 style="margin:0; color:#ffffff; font-size:22px;">
-            🚛 Acquisitions · Commissionnaire de Transport
+            🚛 Acquisitions · Commissionnaire de Transport{label_display}
           </h1>
           <p style="margin:6px 0 0; color:#93c5fd; font-size:14px;">
             Digest du {today}
@@ -88,6 +104,9 @@ def _build_html(new_listings: list[dict], label: str = "") -> str:
             {summary}
           </p>
         </td></tr>
+
+        <!-- Per-source breakdown -->
+        {sources_block}
 
         <!-- Listings -->
         <tr><td style="background:#f9fafb; padding:24px 32px;">
@@ -109,11 +128,17 @@ def _build_html(new_listings: list[dict], label: str = "") -> str:
 </html>"""
 
 
-def _build_plain(new_listings: list[dict], label: str = "") -> str:
+def _build_plain(new_listings: list[dict], label: str = "", source_counts: dict = None) -> str:
     today = datetime.now().strftime("%d/%m/%Y")
+    label_display = f" [{label}]" if label else ""
     if not new_listings:
-        return f"Digest du {today}\n\nAucune nouvelle annonce aujourd'hui.\n"
-    lines = [f"Digest Acquisitions – Commissionnaire de Transport – {today}", ""]
+        return f"Digest{label_display} du {today}\n\nAucune nouvelle annonce aujourd'hui.\n"
+    lines = [f"Digest Acquisitions – Commissionnaire de Transport{label_display} – {today}", ""]
+    if source_counts:
+        lines.append("Par plateforme:")
+        for src, n in sorted(source_counts.items()):
+            lines.append(f"  {src}: {n}")
+        lines.append("")
     for l in new_listings:
         lines.append(f"[{l['source']}] {l['title']}")
         lines.append(f"  📍 {l.get('location','N/C')}  |  💶 {l.get('price','N/C')}  |  🗓 {l.get('date','N/C')}")
@@ -126,7 +151,7 @@ def _build_plain(new_listings: list[dict], label: str = "") -> str:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def send_digest(new_listings: list[dict], force: bool = False, label: str = ""):
+def send_digest(new_listings: list[dict], force: bool = False, label: str = "", source_counts: dict = None):
     """
     Send the daily email digest.
 
@@ -152,8 +177,8 @@ def send_digest(new_listings: list[dict], force: bool = False, label: str = ""):
     msg["From"]    = EMAIL_SENDER
     msg["To"]      = ", ".join(EMAIL_RECIPIENTS)
 
-    msg.attach(MIMEText(_build_plain(new_listings, label), "plain", "utf-8"))
-    msg.attach(MIMEText(_build_html(new_listings, label),  "html",  "utf-8"))
+    msg.attach(MIMEText(_build_plain(new_listings, label, source_counts), "plain", "utf-8"))
+    msg.attach(MIMEText(_build_html(new_listings, label, source_counts),  "html",  "utf-8"))
 
     try:
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:

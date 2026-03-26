@@ -63,17 +63,31 @@ def run(dry_run: bool = False, force_email: bool = False):
         db.mark_seen(new_listings)
 
     # 5. Split into keyword-matched vs all listings for two email digests
-    kw_lower = [kw.lower() for kw in SEARCH_KEYWORDS]
+    _TRANSPORT_KW = [
+        "transport", "transitaire", "logistique", "freight", "commissionnaire",
+        "affrètement", "messagerie", "fret", "expéditeur", "shipping",
+        "douane", "douanier", "camion", "camionnage",
+    ]
+    kw_lower = [kw.lower() for kw in SEARCH_KEYWORDS + _TRANSPORT_KW]
     keyword_listings = [
         l for l in new_listings
         if any(kw in (l["title"] + " " + l.get("description", "")).lower() for kw in kw_lower)
     ]
     logger.info("Keyword-matched listings: %d", len(keyword_listings))
 
+    # Build per-source counts for email headers
+    def source_counts(listings):
+        counts = {}
+        for l in listings:
+            counts[l["source"]] = counts.get(l["source"], 0) + 1
+        return counts
+
     # 6. Send email digests
     if not dry_run:
-        send_digest(keyword_listings, force=force_email, label="Mots-clés ciblés")
-        send_digest(new_listings,     force=force_email, label="Toutes les annonces")
+        send_digest(keyword_listings, force=force_email, label="Mots-clés ciblés",
+                    source_counts=source_counts(keyword_listings))
+        send_digest(new_listings,     force=force_email, label="Toutes les annonces",
+                    source_counts=source_counts(new_listings))
         db.log_run(len(new_listings))
     else:
         logger.info("[DRY RUN] Keyword-matched (%d):", len(keyword_listings))
