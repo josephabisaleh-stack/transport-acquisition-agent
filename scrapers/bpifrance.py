@@ -106,21 +106,26 @@ async def _extract_listings(page: Page) -> list[dict]:
 
 
 async def _search(page: Page, keyword: str) -> list[dict]:
-    # Try URL param approach first (fastest)
     url = f"{SEARCH_URL}?motsCles={keyword.replace(' ', '+')}"
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+        # Angular SPA — needs networkidle to finish rendering
+        await page.goto(url, wait_until="networkidle", timeout=45_000)
     except PWTimeout:
-        await screenshot_on_failure(page, SITE, f"search_{keyword[:20]}")
-        logger.warning("[bpifrance] Page timed out for '%s'", keyword)
-        return []
+        # Try domcontentloaded as fallback and wait manually
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            await asyncio.sleep(4)
+        except PWTimeout:
+            await screenshot_on_failure(page, SITE, f"timeout_{keyword[:20]}")
+            logger.warning("[bpifrance] Page timed out for '%s'", keyword)
+            return []
 
     results = await _extract_listings(page)
 
-    # If URL param yielded nothing, try typing into the search box
+    # If URL param yielded nothing, try the search box
     if not results:
         try:
-            await page.goto(SEARCH_URL, wait_until="domcontentloaded", timeout=30_000)
+            await page.goto(SEARCH_URL, wait_until="networkidle", timeout=45_000)
             input_sel = (
                 "input[type='search'], input[placeholder*='mot'], "
                 "input[placeholder*='recherch'], input[name*='search'], "
@@ -129,7 +134,7 @@ async def _search(page: Page, keyword: str) -> list[dict]:
             if await page.query_selector(input_sel):
                 await human_type(page, input_sel, keyword)
                 await page.keyboard.press("Enter")
-                await page.wait_for_load_state("networkidle", timeout=15_000)
+                await page.wait_for_load_state("networkidle", timeout=20_000)
                 results = await _extract_listings(page)
         except Exception as exc:
             logger.debug("[bpifrance] Search box fallback failed: %s", exc)

@@ -25,12 +25,12 @@ SEARCH_URL    = f"{BASE_URL}/offres"
 TRANSPORT_URL = f"{BASE_URL}/offres/activite/Transport-logistique-L"
 CREDS         = CREDENTIALS[SITE]
 
-# Transentreprise RSS feed (try multiple known paths)
+# Transentreprise RSS feed candidates
 RSS_URLS  = [
     f"{BASE_URL}/offres.rss",
     f"{BASE_URL}/annonces.rss",
-    f"{BASE_URL}/rss",
-    f"{BASE_URL}/feed",
+    f"{BASE_URL}/feed.rss",
+    f"{BASE_URL}/rss.xml",
 ]
 
 
@@ -236,8 +236,21 @@ async def _search_one(page: Page, keyword: str) -> list[dict]:
     return results
 
 
+async def _scrape_transport_category(page: Page) -> list[dict]:
+    """Browse the transport/logistics category URL directly."""
+    try:
+        await page.goto(TRANSPORT_URL, wait_until="networkidle", timeout=25_000)
+    except PWTimeout:
+        await page.goto(TRANSPORT_URL, wait_until="domcontentloaded", timeout=20_000)
+        await asyncio.sleep(3)
+
+    results = await _extract_listings(page)
+    logger.info("[transentreprise] Transport category -> %d results", len(results))
+    return results
+
+
 async def _run_browser() -> list[dict]:
-    """Search transentreprise.com using the keyword form for transport terms."""
+    """Search transentreprise.com for transport listings."""
     seen_urls: set[str] = set()
     all_results: list[dict] = []
 
@@ -245,6 +258,15 @@ async def _run_browser() -> list[dict]:
         if not await _login(page):
             return []
 
+        # Try direct transport category first
+        for listing in await _scrape_transport_category(page):
+            if listing["url"] not in seen_urls:
+                seen_urls.add(listing["url"])
+                all_results.append(listing)
+
+        await asyncio.sleep(DELAY_BETWEEN_REQUESTS)
+
+        # Also try keyword search
         for keyword in _SEARCH_TERMS:
             for listing in await _search_one(page, keyword):
                 if listing["url"] not in seen_urls:

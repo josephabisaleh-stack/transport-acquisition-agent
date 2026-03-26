@@ -107,11 +107,15 @@ async def _scrape_pages(page: Page) -> list[dict]:
     for page_num in range(1, MAX_PAGES + 1):
         url = LIST_URL if page_num == 1 else f"{LIST_URL}?page={page_num}"
         try:
-            await page.goto(url, wait_until="networkidle", timeout=25_000)
+            await page.goto(url, wait_until="networkidle", timeout=35_000)
         except PWTimeout:
-            await screenshot_on_failure(page, SITE, f"page_{page_num}")
-            logger.warning("[transmibat] Timed out on page %d", page_num)
-            break
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=25_000)
+                await asyncio.sleep(4)  # Allow JS click handlers to attach
+            except PWTimeout:
+                await screenshot_on_failure(page, SITE, f"timeout_page_{page_num}")
+                logger.warning("[transmibat] Timed out on page %d", page_num)
+                break
 
         results = await _extract_listings(page)
         if not results:

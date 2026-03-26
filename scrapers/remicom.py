@@ -144,17 +144,18 @@ async def _scrape_pages(page: Page) -> list[dict]:
             logger.info("[remicom] No results on page %d — stopping pagination.", page_num)
             break
 
-        new_count = 0
+        prev_count = len(all_results)
         for listing in results:
             if listing["url"] not in seen_urls:
                 seen_urls.add(listing["url"])
                 all_results.append(listing)
-                new_count += 1
 
-        logger.info("[remicom] Page %d -> %d new results", page_num, new_count)
+        new_count = len(all_results) - prev_count
+        logger.info("[remicom] Page %d -> %d results (%d new)", page_num, len(results), new_count)
 
-        if new_count == 0:
-            break  # No new URLs found — end of listings
+        # Stop only when the page is genuinely empty (not just all-duplicates)
+        if len(results) == 0:
+            break
 
         await asyncio.sleep(DELAY_BETWEEN_REQUESTS)
 
