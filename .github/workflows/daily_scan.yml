@@ -8,6 +8,9 @@ on:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write       # Needed to commit seen_listings.db back to repo
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,14 +34,6 @@ jobs:
           key: browser-sessions-v1
           restore-keys: browser-sessions-v1
 
-      # Restore the SQLite deduplication database
-      - name: Restore listings database cache
-        uses: actions/cache@v4
-        with:
-          path: seen_listings.db
-          key: seen-listings-db-v1
-          restore-keys: seen-listings-db-v1
-
       - name: Run agent
         env:
           EMAIL_SENDER:              ${{ secrets.EMAIL_SENDER }}
@@ -53,15 +48,18 @@ jobs:
           ALVO_PASSWORD:             ${{ secrets.ALVO_PASSWORD }}
         run: python main.py
 
-      # Persist updated sessions and database for next run
+      # Persist browser sessions (cookies) for next run
       - name: Save browser sessions cache
         uses: actions/cache@v4
         with:
           path: .browser_sessions
           key: browser-sessions-v1
 
-      - name: Save listings database cache
-        uses: actions/cache@v4
-        with:
-          path: seen_listings.db
-          key: seen-listings-db-v1
+      # Commit seen_listings.db back to the repo for reliable persistence
+      - name: Commit updated database
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add seen_listings.db
+          git diff --cached --quiet || git commit -m "chore: update seen_listings.db [skip ci]"
+          git push

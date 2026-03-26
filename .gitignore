@@ -10,7 +10,6 @@ venv/
 .browser_sessions/
 
 # Runtime data
-seen_listings.db
 agent.log
 
 # Debug screenshots
