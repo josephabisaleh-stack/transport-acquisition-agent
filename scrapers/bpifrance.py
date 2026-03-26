@@ -158,10 +158,8 @@ async def _run() -> list[dict]:
                     all_results.append(listing)
             await asyncio.sleep(DELAY_BETWEEN_REQUESTS)
 
-    logger.info("[bpifrance] Total unique (raw): %d", len(all_results))
-    filtered = [l for l in all_results if _is_transport_related(l)]
-    logger.info("[bpifrance] Transport-related: %d", len(filtered))
-    return filtered
+    logger.info("[bpifrance] Total unique: %d", len(all_results))
+    return all_results
 
 
 def scrape() -> list[dict]:

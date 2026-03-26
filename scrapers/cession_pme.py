@@ -119,11 +119,8 @@ async def _run() -> list[dict]:
                     seen_urls.add(listing["url"])
                     all_results.append(listing)
             await asyncio.sleep(DELAY_BETWEEN_REQUESTS)
-    logger.info("[cession_pme] Total unique (raw): %d", len(all_results))
-    # Filter to transport-related listings only — site returns broad results
-    filtered = [l for l in all_results if _is_transport_related(l)]
-    logger.info("[cession_pme] Transport-related: %d", len(filtered))
-    return filtered
+    logger.info("[cession_pme] Total unique: %d", len(all_results))
+    return all_results
 
 
 def scrape() -> list[dict]:

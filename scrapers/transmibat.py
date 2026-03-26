@@ -144,10 +144,8 @@ async def _run() -> list[dict]:
     async with browser_page(SITE) as page:
         all_results = await _scrape_pages(page)
 
-    logger.info("[transmibat] Total unique (raw): %d", len(all_results))
-    filtered = [l for l in all_results if _is_transport_related(l)]
-    logger.info("[transmibat] Transport-related: %d", len(filtered))
-    return filtered
+    logger.info("[transmibat] Total unique: %d", len(all_results))
+    return all_results
 
 
 def scrape() -> list[dict]:
