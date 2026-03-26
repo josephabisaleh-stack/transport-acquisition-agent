@@ -69,6 +69,9 @@ async def _extract_listings(page: Page) -> list[dict]:
                 "[class*='localisation'], [class*='location'], [class*='region'], "
                 "[class*='departement'], [class*='ville']"
             )
+            date_el  = await card.query_selector(
+                "time, [class*='date'], [class*='Date'], [class*='publication'], [class*='created']"
+            )
 
             if not title_el or not link_el:
                 continue
@@ -89,6 +92,7 @@ async def _extract_listings(page: Page) -> list[dict]:
                 "description": (await desc_el.inner_text()).strip()[:300] if desc_el else "",
                 "price":       (await price_el.inner_text()).strip() if price_el else "N/C",
                 "location":    (await loc_el.inner_text()).strip() if loc_el else "N/C",
+                "date":        (await date_el.inner_text()).strip() if date_el else "N/C",
             })
         except Exception as exc:
             logger.debug("[bpifrance] Card parse error: %s", exc)

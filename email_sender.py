@@ -36,7 +36,8 @@ def _listing_html(listing: dict, index: int) -> str:
           </h3>
           <p style="margin:0; font-size:13px; color:#6b7280;">
             📍 {listing.get('location','N/C')} &nbsp;|&nbsp;
-            💶 {listing.get('price','N/C')}
+            💶 {listing.get('price','N/C')} &nbsp;|&nbsp;
+            🗓 {listing.get('date','N/C')}
           </p>
         </div>
       </div>
@@ -115,7 +116,7 @@ def _build_plain(new_listings: list[dict]) -> str:
     lines = [f"Digest Acquisitions – Commissionnaire de Transport – {today}", ""]
     for l in new_listings:
         lines.append(f"[{l['source']}] {l['title']}")
-        lines.append(f"  📍 {l.get('location','N/C')}  |  💶 {l.get('price','N/C')}")
+        lines.append(f"  📍 {l.get('location','N/C')}  |  💶 {l.get('price','N/C')}  |  🗓 {l.get('date','N/C')}")
         lines.append(f"  {l['url']}")
         if l.get("description"):
             lines.append(f"  {l['description'][:200]}")

@@ -90,6 +90,9 @@ async def _extract_listings(page: Page) -> list[dict]:
                 "[class*='region'], [class*='location'], [class*='localisation'], "
                 "[class*='canton'], [class*='ville'], [class*='pays']"
             )
+            date_el  = await card.query_selector(
+                "time, [class*='date'], [class*='Date'], [class*='published'], [class*='created']"
+            )
 
             title_text = (await title_el.inner_text()).strip() if title_el else ""
             if not title_text:
@@ -104,6 +107,7 @@ async def _extract_listings(page: Page) -> list[dict]:
                 "description": (await desc_el.inner_text()).strip()[:300] if desc_el else "",
                 "price":       (await price_el.inner_text()).strip() if price_el else "N/C",
                 "location":    (await loc_el.inner_text()).strip() if loc_el else "N/C",
+                "date":        (await date_el.inner_text()).strip() if date_el else "N/C",
             })
         except Exception as exc:
             logger.debug("[remicom] Card parse error: %s", exc)

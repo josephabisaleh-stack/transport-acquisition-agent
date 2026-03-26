@@ -43,6 +43,7 @@ def _fetch_rss() -> list[dict]:
             title = (item.findtext("title") or "").strip()
             url   = (item.findtext("link")  or "").strip()
             desc  = (item.findtext("description") or "").strip()[:300]
+            date  = (item.findtext("pubDate") or "").strip()
             if title and url:
                 # Only keep transport-related listings
                 combined = (title + " " + desc).lower()
@@ -54,6 +55,7 @@ def _fetch_rss() -> list[dict]:
                         "description": desc,
                         "price":       "N/C",
                         "location":    "N/C",
+                        "date":        date or "N/C",
                     })
         if results:
             logger.info("[transentreprise] RSS -> %d relevant listings", len(results))
@@ -136,6 +138,7 @@ async def _extract_listings(page: Page) -> list[dict]:
                 "description": "",
                 "price":       "N/C",
                 "location":    location or "N/C",
+                "date":        "N/C",
             })
         except Exception as exc:
             logger.debug("[transentreprise] Link parse error: %s", exc)

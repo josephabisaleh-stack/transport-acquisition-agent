@@ -66,6 +66,9 @@ async def _extract_listings(page: Page) -> list[dict]:
             desc_el  = await card.query_selector(".description, .resume, p")
             price_el = await card.query_selector(".prix, .price, [class*='prix']")
             loc_el   = await card.query_selector(".localisation, .ville, .region, [class*='loc']")
+            date_el  = await card.query_selector(
+                "time, [class*='date'], [class*='Date'], .date_publication, .date"
+            )
             if not title_el or not link_el:
                 continue
             href = await link_el.get_attribute("href") or ""
@@ -77,6 +80,7 @@ async def _extract_listings(page: Page) -> list[dict]:
                 "description": (await desc_el.inner_text()).strip()[:300] if desc_el else "",
                 "price":       (await price_el.inner_text()).strip() if price_el else "N/C",
                 "location":    (await loc_el.inner_text()).strip() if loc_el else "N/C",
+                "date":        (await date_el.inner_text()).strip() if date_el else "N/C",
             })
         except Exception as exc:
             logger.debug("[cession_pme] Card parse error: %s", exc)

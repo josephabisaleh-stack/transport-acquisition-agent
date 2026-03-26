@@ -72,6 +72,7 @@ async def _extract_listings(page: Page) -> list[dict]:
                 continue
 
             # Transmibat table columns: date | activity | location | revenue
+            date     = texts[0] if len(texts) > 0 else "N/C"
             title    = texts[1] if len(texts) > 1 else texts[0]
             location = texts[2] if len(texts) > 2 else "N/C"
             price    = texts[3] if len(texts) > 3 else "N/C"
@@ -83,6 +84,7 @@ async def _extract_listings(page: Page) -> list[dict]:
                 "description": "",
                 "price":       price,
                 "location":    location,
+                "date":        date,
             })
         except Exception as exc:
             logger.debug("[transmibat] Row parse error: %s", exc)

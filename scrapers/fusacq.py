@@ -61,8 +61,11 @@ async def _extract_listings(page: Page) -> list[dict]:
             # Clean query-string navigation params — keep only the path
             url = (href if href.startswith("http") else BASE_URL + href).split("?")[0]
 
-            ca_el  = await card.query_selector("strong")
-            loc_el = await card.query_selector(".localisation, [class*='loc'], .region, .ville")
+            ca_el   = await card.query_selector("strong")
+            loc_el  = await card.query_selector(".localisation, [class*='loc'], .region, .ville")
+            date_el = await card.query_selector(
+                "time, [class*='date'], [class*='Date'], .date_publication, .date"
+            )
 
             listings.append({
                 "source":      "Fusacq",
@@ -71,6 +74,7 @@ async def _extract_listings(page: Page) -> list[dict]:
                 "description": "",
                 "price":       (await ca_el.inner_text()).strip() if ca_el else "N/C",
                 "location":    (await loc_el.inner_text()).strip() if loc_el else "N/C",
+                "date":        (await date_el.inner_text()).strip() if date_el else "N/C",
             })
         except Exception as exc:
             logger.debug("[fusacq] Card parse error: %s", exc)
