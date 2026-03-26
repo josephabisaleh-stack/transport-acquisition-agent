@@ -49,7 +49,7 @@ def _listing_html(listing: dict, index: int) -> str:
     </div>"""
 
 
-def _build_html(new_listings: list[dict]) -> str:
+def _build_html(new_listings: list[dict], label: str = "") -> str:
     today  = datetime.now().strftime("%d %B %Y")
     count  = len(new_listings)
     cards  = "\n".join(_listing_html(l, i) for i, l in enumerate(new_listings))
@@ -109,7 +109,7 @@ def _build_html(new_listings: list[dict]) -> str:
 </html>"""
 
 
-def _build_plain(new_listings: list[dict]) -> str:
+def _build_plain(new_listings: list[dict], label: str = "") -> str:
     today = datetime.now().strftime("%d/%m/%Y")
     if not new_listings:
         return f"Digest du {today}\n\nAucune nouvelle annonce aujourd'hui.\n"
