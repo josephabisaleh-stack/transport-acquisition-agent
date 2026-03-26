@@ -53,6 +53,15 @@ def _build_html(new_listings: list[dict]) -> str:
     count  = len(new_listings)
     cards  = "\n".join(_listing_html(l, i) for i, l in enumerate(new_listings))
 
+    s = "s" if count > 1 else ""
+    summary = (
+        f"🎯 {count} nouvelle{s} annonce{s} détectée{s} aujourd'hui"
+        if count > 0
+        else "✅ Aucune nouvelle annonce aujourd'hui."
+    )
+    no_listings_msg = "<p style='color:#6b7280; text-align:center; padding:32px 0;'>L'agent repassera demain.</p>"
+    body = cards if count > 0 else no_listings_msg
+
     return f"""
 <!DOCTYPE html>
 <html lang="fr">
@@ -75,21 +84,19 @@ def _build_html(new_listings: list[dict]) -> str:
         <!-- Summary bar -->
         <tr><td style="background:#dbeafe; padding:14px 32px;">
           <p style="margin:0; font-size:15px; color:#1e3a8a; font-weight:600;">
-            {'🎯 ' + str(count) + ' nouvelle' + ('s' if count > 1 else '') + ' annonce' + ('s' if count > 1 else '') + ' détectée' + ('s' if count > 1 else '') + ' aujourd\'hui'
-             if count > 0 else '✅ Aucune nouvelle annonce aujourd\'hui.'}
+            {summary}
           </p>
         </td></tr>
 
         <!-- Listings -->
         <tr><td style="background:#f9fafb; padding:24px 32px;">
-          {cards if count > 0 else
-           "<p style='color:#6b7280; text-align:center; padding:32px 0;'>L'agent repassera demain.</p>"}
+          {body}
         </td></tr>
 
         <!-- Footer -->
         <tr><td style="background:#1e3a5f; border-radius:0 0 12px 12px; padding:18px 32px;">
           <p style="margin:0; font-size:12px; color:#93c5fd;">
-            Sources scannées : Fusacq · Cession PME · Transentreprise (CCI) · Alvo &nbsp;|&nbsp;
+            Sources scannées : Fusacq · Cession PME · Transentreprise · Alvo · BPI France · Remicom · Transmibat &nbsp;|&nbsp;
             Zones : France 🇫🇷 · Suisse 🇨🇭
           </p>
         </td></tr>
