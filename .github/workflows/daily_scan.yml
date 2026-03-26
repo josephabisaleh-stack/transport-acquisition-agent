@@ -1,0 +1,67 @@
+name: Daily Acquisition Scan
+
+on:
+  schedule:
+    - cron: "0 7 * * *"    # 07:00 UTC = 09:00 Paris / Geneva
+  workflow_dispatch:        # Manual trigger from GitHub Actions UI
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright Chromium browser
+        run: playwright install chromium --with-deps
+
+      # Restore saved login sessions (cookies) from previous run
+      - name: Restore browser sessions cache
+        uses: actions/cache@v4
+        with:
+          path: .browser_sessions
+          key: browser-sessions-v1
+          restore-keys: browser-sessions-v1
+
+      # Restore the SQLite deduplication database
+      - name: Restore listings database cache
+        uses: actions/cache@v4
+        with:
+          path: seen_listings.db
+          key: seen-listings-db-v1
+          restore-keys: seen-listings-db-v1
+
+      - name: Run agent
+        env:
+          EMAIL_SENDER:              ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD:            ${{ secrets.EMAIL_PASSWORD }}
+          FUSACQ_EMAIL:              ${{ secrets.FUSACQ_EMAIL }}
+          FUSACQ_PASSWORD:           ${{ secrets.FUSACQ_PASSWORD }}
+          CESSION_PME_EMAIL:         ${{ secrets.CESSION_PME_EMAIL }}
+          CESSION_PME_PASSWORD:      ${{ secrets.CESSION_PME_PASSWORD }}
+          TRANSENTREPRISE_EMAIL:     ${{ secrets.TRANSENTREPRISE_EMAIL }}
+          TRANSENTREPRISE_PASSWORD:  ${{ secrets.TRANSENTREPRISE_PASSWORD }}
+          ALVO_EMAIL:                ${{ secrets.ALVO_EMAIL }}
+          ALVO_PASSWORD:             ${{ secrets.ALVO_PASSWORD }}
+        run: python main.py
+
+      # Persist updated sessions and database for next run
+      - name: Save browser sessions cache
+        uses: actions/cache@v4
+        with:
+          path: .browser_sessions
+          key: browser-sessions-v1
+
+      - name: Save listings database cache
+        uses: actions/cache@v4
+        with:
+          path: seen_listings.db
+          key: seen-listings-db-v1
