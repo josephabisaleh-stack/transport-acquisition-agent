@@ -14,6 +14,7 @@ import sys
 from datetime import datetime
 
 import db
+from config import SEARCH_KEYWORDS
 from email_sender import send_digest
 from scrapers import fusacq, cession_pme, transentreprise, alvo, bpifrance, remicom, transmibat
 
