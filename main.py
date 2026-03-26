@@ -15,7 +15,7 @@ from datetime import datetime
 
 import db
 from email_sender import send_digest
-from scrapers import fusacq, cession_pme, transentreprise, alvo, bpifrance, remicom
+from scrapers import fusacq, cession_pme, transentreprise, alvo, bpifrance, remicom, transmibat
 
 
 def setup_logging(quiet: bool):
@@ -41,7 +41,7 @@ def run(dry_run: bool = False, force_email: bool = False):
 
     # 2. Scrape all sources
     all_listings: list[dict] = []
-    for scraper_module in [fusacq, cession_pme, transentreprise, alvo, bpifrance, remicom]:
+    for scraper_module in [fusacq, cession_pme, transentreprise, alvo, bpifrance, remicom, transmibat]:
         name = scraper_module.__name__.split(".")[-1]
         logger.info("Scraping %s …", name)
         try:
