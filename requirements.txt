@@ -3,3 +3,4 @@ playwright>=1.43.0   # browser automation — run `playwright install chromium` 
 streamlit>=1.35.0
 pandas>=2.0.0
 psycopg2-binary>=2.9.0
+supabase>=2.0.0      # REST API client (used by Streamlit Cloud — avoids IPv6-only direct DB)

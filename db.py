@@ -1,8 +1,13 @@
 """
-Database layer — supports both SQLite (local dev) and Postgres (production).
+Database layer — three backends in priority order:
 
-If the DATABASE_URL environment variable is set, uses Postgres (Supabase).
-Otherwise falls back to the local SQLite file defined in config.DB_PATH.
+1. DATABASE_URL set  → direct Postgres via psycopg2  (GitHub Actions, full IPv4/IPv6)
+2. SUPABASE_URL + SUPABASE_KEY set  → Supabase REST API over HTTPS  (Streamlit Cloud, IPv4 only)
+3. Neither set  → local SQLite  (offline dev)
+
+This split exists because Streamlit Community Cloud doesn't support IPv6,
+so the direct Postgres connection string (which resolves to an IPv6 address)
+fails there. The REST API uses HTTPS on an IPv4 hostname instead.
 """
 import os
 import hashlib
@@ -10,22 +15,40 @@ import sqlite3
 from datetime import datetime
 from config import DB_PATH
 
-# Read DATABASE_URL from env var (GitHub Actions / local) or Streamlit secrets
+# ── Read credentials from env vars, then Streamlit secrets ───────────────────
+
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
-if not DATABASE_URL:
-    try:
-        import streamlit as st
-        DATABASE_URL = st.secrets.get("DATABASE_URL", "")
-    except Exception:
-        pass
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+
+try:
+    import streamlit as st
+    DATABASE_URL = DATABASE_URL or st.secrets.get("DATABASE_URL", "")
+    SUPABASE_URL = SUPABASE_URL or st.secrets.get("SUPABASE_URL", "")
+    SUPABASE_KEY = SUPABASE_KEY or st.secrets.get("SUPABASE_KEY", "")
+except Exception:
+    pass
 
 
-def _is_postgres() -> bool:
-    return bool(DATABASE_URL)
+def _backend() -> str:
+    if DATABASE_URL:
+        return "postgres"
+    if SUPABASE_URL and SUPABASE_KEY:
+        return "supabase"
+    return "sqlite"
 
+
+# ── Supabase REST helpers ─────────────────────────────────────────────────────
+
+def _supa():
+    from supabase import create_client
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+# ── Postgres / SQLite helpers ─────────────────────────────────────────────────
 
 def _connect():
-    if _is_postgres():
+    if DATABASE_URL:
         import psycopg2
         return psycopg2.connect(DATABASE_URL)
     return sqlite3.connect(DB_PATH)
@@ -33,20 +56,23 @@ def _connect():
 
 def _ph() -> str:
     """SQL placeholder: %s for Postgres, ? for SQLite."""
-    return "%s" if _is_postgres() else "?"
+    return "%s" if DATABASE_URL else "?"
 
 
 def _insert_prefix() -> str:
-    """INSERT prefix for upsert-ignore behaviour."""
-    return "INSERT" if _is_postgres() else "INSERT OR IGNORE"
+    return "INSERT" if DATABASE_URL else "INSERT OR IGNORE"
 
 
 def _on_conflict() -> str:
-    return "ON CONFLICT DO NOTHING" if _is_postgres() else ""
+    return "ON CONFLICT DO NOTHING" if DATABASE_URL else ""
 
+
+# ── Public API ────────────────────────────────────────────────────────────────
 
 def init_db():
-    """Create tables and indexes if they don't exist yet."""
+    """Create tables if they don't exist. Skipped for Supabase REST (tables created by Actions)."""
+    if _backend() == "supabase":
+        return  # Tables already exist — GitHub Actions creates them via psycopg2
     conn = _connect()
     try:
         cur = conn.cursor()
@@ -95,6 +121,13 @@ def filter_new(listings: list[dict]) -> list[dict]:
     """Return only listings not yet stored in the database."""
     if not listings:
         return []
+
+    if _backend() == "supabase":
+        ids = [make_id(l["url"]) for l in listings]
+        existing = _supa().table("listings").select("id").in_("id", ids).execute()
+        existing_ids = {r["id"] for r in existing.data}
+        return [l for l in listings if make_id(l["url"]) not in existing_ids]
+
     ph = _ph()
     conn = _connect()
     try:
@@ -112,6 +145,28 @@ def filter_new(listings: list[dict]) -> list[dict]:
 
 def mark_seen(listings: list[dict]):
     """Persist new listings with full data."""
+    if not listings:
+        return
+
+    if _backend() == "supabase":
+        now = datetime.utcnow().isoformat()
+        rows = [
+            {
+                "id":           make_id(l["url"]),
+                "source":       l["source"],
+                "title":        l["title"],
+                "url":          l["url"],
+                "description":  l.get("description", ""),
+                "price":        l.get("price", "N/C"),
+                "location":     l.get("location", "N/C"),
+                "scraped_date": l.get("date", "N/C"),
+                "first_seen":   now,
+            }
+            for l in listings
+        ]
+        _supa().table("listings").upsert(rows, on_conflict="id").execute()
+        return
+
     ph = _ph()
     prefix = _insert_prefix()
     conflict = _on_conflict()
@@ -144,9 +199,13 @@ def mark_seen(listings: list[dict]):
 
 def get_all_listings() -> list[dict]:
     """Return all listings ordered by first_seen DESC."""
+    if _backend() == "supabase":
+        response = _supa().table("listings").select("*").order("first_seen", desc=True).execute()
+        return response.data
+
     conn = _connect()
     try:
-        if _is_postgres():
+        if DATABASE_URL:
             import psycopg2.extras
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         else:
@@ -161,6 +220,15 @@ def get_all_listings() -> list[dict]:
 def update_listing_tracking(listing_id: str, contacted: bool, interesting: bool,
                              status: str, notes: str):
     """Update the user-managed CRM fields for a single listing."""
+    if _backend() == "supabase":
+        _supa().table("listings").update({
+            "contacted":   int(contacted),
+            "interesting": int(interesting),
+            "status":      status,
+            "notes":       notes,
+        }).eq("id", listing_id).execute()
+        return
+
     ph = _ph()
     conn = _connect()
     try:
@@ -177,6 +245,13 @@ def update_listing_tracking(listing_id: str, contacted: bool, interesting: bool,
 
 
 def log_run(new_count: int):
+    if _backend() == "supabase":
+        _supa().table("digest_log").insert({
+            "run_at":    datetime.utcnow().isoformat(),
+            "new_count": new_count,
+        }).execute()
+        return
+
     ph = _ph()
     conn = _connect()
     try:
