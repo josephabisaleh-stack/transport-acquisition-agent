@@ -31,10 +31,11 @@ except Exception:
 
 
 def _backend() -> str:
-    if DATABASE_URL:
-        return "postgres"
+    # Supabase REST wins when keys are present — works from IPv4-only hosts (Streamlit Cloud)
     if SUPABASE_URL and SUPABASE_KEY:
         return "supabase"
+    if DATABASE_URL:
+        return "postgres"
     return "sqlite"
 
 
