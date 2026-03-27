@@ -11,6 +11,7 @@ venv/
 
 # Runtime data
 agent.log
+seen_listings.db   # DB is now hosted on Supabase, not committed to repo
 
 # Debug screenshots
 debug_*.png
