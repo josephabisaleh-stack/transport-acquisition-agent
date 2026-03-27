@@ -125,9 +125,10 @@ async def _extract_listings(page: Page) -> list[dict]:
 
 
 async def _scrape_pages(page: Page) -> list[dict]:
-    """Paginate through all listing pages and collect results."""
+    """Paginate through listing pages, stopping when no new listings appear."""
     seen_urls: set[str] = set()
     all_results: list[dict] = []
+    consecutive_empty = 0
 
     for page_num in range(1, MAX_PAGES + 1):
         url = LIST_URL if page_num == 1 else f"{LIST_URL}?page={page_num}"
@@ -153,9 +154,13 @@ async def _scrape_pages(page: Page) -> list[dict]:
         new_count = len(all_results) - prev_count
         logger.info("[remicom] Page %d -> %d results (%d new)", page_num, len(results), new_count)
 
-        # Stop only when the page is genuinely empty (not just all-duplicates)
-        if len(results) == 0:
-            break
+        if new_count == 0:
+            consecutive_empty += 1
+            if consecutive_empty >= 2:
+                logger.info("[remicom] 2 consecutive pages with no new listings — stopping.")
+                break
+        else:
+            consecutive_empty = 0
 
         await asyncio.sleep(DELAY_BETWEEN_REQUESTS)
 

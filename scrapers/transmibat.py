@@ -100,6 +100,17 @@ async def _extract_listings(page: Page) -> list[dict]:
     return listings
 
 
+async def _dismiss_cookie_dialog(page: Page):
+    """Click the first cookie consent button found (Tout autoriser / Refuser)."""
+    for btn_text in ["Tout autoriser", "Refuser", "Accepter", "OK"]:
+        try:
+            await page.click(f"button:has-text('{btn_text}')", timeout=3_000)
+            await asyncio.sleep(0.5)
+            return
+        except Exception:
+            continue
+
+
 async def _scrape_pages(page: Page) -> list[dict]:
     seen_urls: set[str] = set()
     all_results: list[dict] = []
@@ -116,6 +127,9 @@ async def _scrape_pages(page: Page) -> list[dict]:
                 await screenshot_on_failure(page, SITE, f"timeout_page_{page_num}")
                 logger.warning("[transmibat] Timed out on page %d", page_num)
                 break
+
+        if page_num == 1:
+            await _dismiss_cookie_dialog(page)
 
         results = await _extract_listings(page)
         if not results:

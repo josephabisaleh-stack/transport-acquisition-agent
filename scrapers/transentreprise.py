@@ -114,50 +114,52 @@ _TRANSPORT_PATH_TERMS = [
 async def _extract_listings(page: Page) -> list[dict]:
     """Extract listings by finding /offres/fiche/ links that are transport-related.
 
-    Transentreprise encodes business type in the URL path:
-    /offres/fiche/{CODE}/{business-type}/{region}/{dept}/{location}
-
-    We filter by business-type segment to avoid picking up the "dernières offres"
-    section (latest listings across all categories) that appears on every page.
+    Uses page.evaluate() to collect all link data in one JS call, avoiding
+    stale element references that occur when the page navigates during iteration.
     """
+    try:
+        links_data = await page.evaluate("""
+            () => [...document.querySelectorAll("a[href*='/offres/fiche/']")]
+                .map(a => ({ href: a.getAttribute('href') || '', text: a.innerText.trim() }))
+        """)
+    except Exception as exc:
+        logger.debug("[transentreprise] evaluate failed: %s", exc)
+        return []
+
     listings = []
     seen_hrefs: set[str] = set()
 
-    links = await page.query_selector_all("a[href*='/offres/fiche/']")
-    for link in links:
-        try:
-            href = (await link.get_attribute("href") or "").strip()
-            if not href or href in seen_hrefs:
-                continue
-            seen_hrefs.add(href)
+    for item in links_data:
+        href = (item.get("href") or "").strip()
+        if not href or href in seen_hrefs:
+            continue
+        seen_hrefs.add(href)
 
-            # Filter: only keep URLs whose path contains a transport-related term
-            if not any(t in href.lower() for t in _TRANSPORT_PATH_TERMS):
-                continue
+        # Filter: only keep URLs whose path contains a transport-related term
+        if not any(t in href.lower() for t in _TRANSPORT_PATH_TERMS):
+            continue
 
-            url = href if href.startswith("http") else BASE_URL + href
+        url = href if href.startswith("http") else BASE_URL + href
 
-            # Parse business type and location from URL segments
-            # e.g. /offres/fiche/ARA257824C/transport-routier/auvergne/rhone-alpes/lyon
-            parts = [p for p in href.split("/") if p]
-            business_type = parts[3].replace("-", " ").title() if len(parts) > 3 else ""
-            location_parts = parts[5:] if len(parts) > 5 else []
-            location = ", ".join(p.replace("-", " ").title() for p in location_parts)
+        # Parse business type and location from URL segments
+        # e.g. /offres/fiche/ARA257824C/transport-routier/auvergne/rhone-alpes/lyon
+        parts = [p for p in href.split("/") if p]
+        business_type = parts[3].replace("-", " ").title() if len(parts) > 3 else ""
+        location_parts = parts[5:] if len(parts) > 5 else []
+        location = ", ".join(p.replace("-", " ").title() for p in location_parts)
 
-            link_text = (await link.inner_text()).strip()
-            title = link_text if link_text and len(link_text) > 3 else business_type
+        link_text = (item.get("text") or "").strip()
+        title = link_text if link_text and len(link_text) > 3 else business_type
 
-            listings.append({
-                "source":      "Transentreprise (CCI)",
-                "title":       title or business_type,
-                "url":         url,
-                "description": "",
-                "price":       "N/C",
-                "location":    location or "N/C",
-                "date":        "N/C",
-            })
-        except Exception as exc:
-            logger.debug("[transentreprise] Link parse error: %s", exc)
+        listings.append({
+            "source":      "Transentreprise (CCI)",
+            "title":       title or business_type,
+            "url":         url,
+            "description": "",
+            "price":       "N/C",
+            "location":    location or "N/C",
+            "date":        "N/C",
+        })
     return listings
 
 

@@ -105,39 +105,26 @@ async def _extract_listings(page: Page) -> list[dict]:
     return listings
 
 
-async def _search(page: Page, keyword: str) -> list[dict]:
+async def _search(page: Page, keyword: str) -> list[dict] | None:
+    """Return listings, or None if the site is blocking us (403/WAF)."""
     url = f"{SEARCH_URL}?motsCles={keyword.replace(' ', '+')}"
     try:
-        # Angular SPA — needs networkidle to finish rendering
-        await page.goto(url, wait_until="networkidle", timeout=45_000)
+        response = await page.goto(url, wait_until="networkidle", timeout=45_000)
     except PWTimeout:
-        # Try domcontentloaded as fallback and wait manually
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            response = await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
             await asyncio.sleep(4)
         except PWTimeout:
             await screenshot_on_failure(page, SITE, f"timeout_{keyword[:20]}")
             logger.warning("[bpifrance] Page timed out for '%s'", keyword)
             return []
 
-    results = await _extract_listings(page)
+    # CloudFront/WAF blocks GitHub Actions IPs with 403
+    if response and response.status == 403:
+        logger.warning("[bpifrance] 403 blocked by CDN — skipping remaining keywords.")
+        return None  # Signal caller to abort
 
-    # If URL param yielded nothing, try the search box
-    if not results:
-        try:
-            await page.goto(SEARCH_URL, wait_until="networkidle", timeout=45_000)
-            input_sel = (
-                "input[type='search'], input[placeholder*='mot'], "
-                "input[placeholder*='recherch'], input[name*='search'], "
-                "input[name*='mot'], input[type='text']"
-            )
-            if await page.query_selector(input_sel):
-                await human_type(page, input_sel, keyword)
-                await page.keyboard.press("Enter")
-                await page.wait_for_load_state("networkidle", timeout=20_000)
-                results = await _extract_listings(page)
-        except Exception as exc:
-            logger.debug("[bpifrance] Search box fallback failed: %s", exc)
+    results = await _extract_listings(page)
 
     if not results:
         await screenshot_on_failure(page, SITE, f"no_results_{keyword[:20]}")
@@ -152,7 +139,10 @@ async def _run() -> list[dict]:
 
     async with browser_page(SITE) as page:
         for keyword in SEARCH_KEYWORDS:
-            for listing in await _search(page, keyword):
+            result = await _search(page, keyword)
+            if result is None:
+                break  # Site is blocking us, no point retrying other keywords
+            for listing in result:
                 if listing["url"] not in seen_urls:
                     seen_urls.add(listing["url"])
                     all_results.append(listing)

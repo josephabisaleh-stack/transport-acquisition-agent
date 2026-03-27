@@ -16,6 +16,9 @@ seen_listings.db   # DB is now hosted on Supabase, not committed to repo
 # Debug screenshots
 debug_*.png
 
+# Streamlit secrets (never commit — contains DB password)
+.streamlit/secrets.toml
+
 # OS
 .DS_Store
 Thumbs.db
