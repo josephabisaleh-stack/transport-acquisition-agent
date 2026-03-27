@@ -8,6 +8,7 @@ Database layer — three backends in priority order:
 This split exists because Streamlit Community Cloud doesn't support IPv6,
 so the direct Postgres connection string (which resolves to an IPv6 address)
 fails there. The REST API uses HTTPS on an IPv4 hostname instead.
+The Supabase path uses requests directly (no supabase-py) to avoid library issues.
 """
 import os
 import hashlib
@@ -39,11 +40,43 @@ def _backend() -> str:
     return "sqlite"
 
 
-# ── Supabase REST helpers ─────────────────────────────────────────────────────
+# ── Supabase REST helpers (plain requests — no supabase-py) ──────────────────
 
-def _supa():
-    from supabase import create_client
-    return create_client(SUPABASE_URL, SUPABASE_KEY)
+def _supa_headers() -> dict:
+    return {
+        "apikey":        SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type":  "application/json",
+        "Prefer":        "return=representation",
+    }
+
+
+def _supa_get(table: str, params: dict = None) -> list[dict]:
+    import requests
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    r = requests.get(url, headers=_supa_headers(), params=params, timeout=15)
+    r.raise_for_status()
+    return r.json()
+
+
+def _supa_post(table: str, data, upsert_on: str = None) -> None:
+    import requests
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    headers = _supa_headers()
+    if upsert_on:
+        headers["Prefer"] = f"resolution=ignore-duplicates,return=minimal"
+    r = requests.post(url, headers=headers, json=data, timeout=15)
+    r.raise_for_status()
+
+
+def _supa_patch(table: str, match: dict, data: dict) -> None:
+    import requests
+    params = {k: f"eq.{v}" for k, v in match.items()}
+    url = f"{SUPABASE_URL}/rest/v1/{table}"
+    headers = _supa_headers()
+    headers["Prefer"] = "return=minimal"
+    r = requests.patch(url, headers=headers, params=params, json=data, timeout=15)
+    r.raise_for_status()
 
 
 # ── Postgres / SQLite helpers ─────────────────────────────────────────────────
@@ -125,8 +158,8 @@ def filter_new(listings: list[dict]) -> list[dict]:
 
     if _backend() == "supabase":
         ids = [make_id(l["url"]) for l in listings]
-        existing = _supa().table("listings").select("id").in_("id", ids).execute()
-        existing_ids = {r["id"] for r in existing.data}
+        existing = _supa_get("listings", {"select": "id", "id": f"in.({','.join(ids)})"})
+        existing_ids = {r["id"] for r in existing}
         return [l for l in listings if make_id(l["url"]) not in existing_ids]
 
     ph = _ph()
@@ -165,7 +198,7 @@ def mark_seen(listings: list[dict]):
             }
             for l in listings
         ]
-        _supa().table("listings").upsert(rows, on_conflict="id").execute()
+        _supa_post("listings", rows, upsert_on="id")
         return
 
     ph = _ph()
@@ -201,8 +234,7 @@ def mark_seen(listings: list[dict]):
 def get_all_listings() -> list[dict]:
     """Return all listings ordered by first_seen DESC."""
     if _backend() == "supabase":
-        response = _supa().table("listings").select("*").order("first_seen", desc=True).execute()
-        return response.data
+        return _supa_get("listings", {"select": "*", "order": "first_seen.desc"})
 
     conn = _connect()
     try:
@@ -222,12 +254,12 @@ def update_listing_tracking(listing_id: str, contacted: bool, interesting: bool,
                              status: str, notes: str):
     """Update the user-managed CRM fields for a single listing."""
     if _backend() == "supabase":
-        _supa().table("listings").update({
+        _supa_patch("listings", {"id": listing_id}, {
             "contacted":   int(contacted),
             "interesting": int(interesting),
             "status":      status,
             "notes":       notes,
-        }).eq("id", listing_id).execute()
+        })
         return
 
     ph = _ph()
@@ -247,10 +279,10 @@ def update_listing_tracking(listing_id: str, contacted: bool, interesting: bool,
 
 def log_run(new_count: int):
     if _backend() == "supabase":
-        _supa().table("digest_log").insert({
+        _supa_post("digest_log", {
             "run_at":    datetime.utcnow().isoformat(),
             "new_count": new_count,
-        }).execute()
+        })
         return
 
     ph = _ph()
