@@ -1,2 +1,4 @@
 requests>=2.31.0
 playwright>=1.43.0   # browser automation — run `playwright install chromium` after pip install
+streamlit>=1.35.0
+pandas>=2.0.0
